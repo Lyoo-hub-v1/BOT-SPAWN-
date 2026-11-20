@@ -1,61 +1,85 @@
 import discord
+from discord.ext import commands
 import os
+from collections import defaultdict
+import time
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-TARGET_CHANNEL_ID = 1572969170767716452  # Channel kamu #info-egg-spawn-sae
-SOURCE_CHANNEL_ID = 1555090108942913586  # Channel SenZ #egg-spawns
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.messages = True
-client = discord.Client(intents=intents)
+# KATA JOROK
+KATA_JOROK = ["anjing", "bangsat", "tolol", "goblok", "bego", "kontol", "memek", "kampret", "bajingan", "asu", "jancuk", "pepek", "babi", "monyet"]
 
-@client.event
+peringatan = defaultdict(int)
+spam_data = defaultdict(list)
+
+@bot.event
 async def on_ready():
-    print(f"Bot {client.user} sudah ONLINE! Siap memantau Divine dan Eternal!")
+    print(f"Bot CIOO JAGO sudah ONLINE! {bot.user}")
 
-@client.event
+@bot.event
 async def on_message(message):
-    if message.author == client.user:
-        return
-    if message.channel.id != SOURCE_CHANNEL_ID:
-        return
-    if not message.embeds:
+    if message.author.bot:
         return
 
-    embed = message.embeds[0]
-    title = embed.title or ""
+    # === ANTI SPAM : 10x DALAM 5 DETIK = MUTE 5 MENIT ===
+    user_id = message.author.id
+    sekarang = time.time()
+    spam_data[user_id].append(sekarang)
+    spam_data[user_id] = [t for t in spam_data[user_id] if sekarang - t < 5]
 
-    # FILTER: HANYA DIVINE DAN ETERNAL SAJA!
-    if "Divine Egg Spawned" not in title and "Eternal Egg Spawned" not in title:
-        print(f"Lewati: {title}")
+    if len(spam_data[user_id]) >= 10:
+        try:
+            await message.channel.purge(limit=10, check=lambda m: m.author == message.author)
+        except:
+            pass
+        try:
+            await message.author.timeout(duration=300, reason="Spam 10x")
+        except:
+            pass
+        spam_data[user_id] = []
         return
 
-    print(f"TELUR LANGKA DITEMUKAN! {title}")
-    target = client.get_channel(TARGET_CHANNEL_ID)
-    if not target:
-        return
+    # === ANTI KATA JOROK : 5x BARU BAN, BOT CUMAN JAGO BAE ===
+    isi = message.content.lower()
+    for kata in KATA_JOROK:
+        if kata in isi:
+            try:
+                await message.delete()
+            except:
+                pass
 
-    desc = embed.description or ""
-    
-    # Tentukan warna dan judul sesuai jenis telur
-    if "Divine" in title:
-        warna = 0xFFD700
-        judul = "‼️✨🥚 DIVINE EGG HAS SPAWNED! 🥚✨‼️"
-        ping = "@everyone DIVINE MUNCUL!!"
-    else:
-        warna = 0xA020F0
-        judul = "🔥🥚 ETERNAL EGG HAS SPAWNED! 🥚🔥"
-        ping = "@everyone ETERNAL MUNCUL!!"
+            peringatan[user_id] += 1
+            jumlah = peringatan[user_id]
 
-    new_embed = discord.Embed(
-        title=judul,
-        description=f"{desc}\n\n**BURUAN MASUK! SEBELUM KEDULUAN ORANG LAIN!**",
-        color=warna
-    )
-    new_embed.add_field(name="🎮 JOIN GAME", value="[KLIK DI SINI UNTUK STEAL!](https://www.roblox.com/games/107778070777162/Steal-an-Egg)", inline=False)
-    new_embed.set_footer(text="CIOO SPAWN NOTIF • Divine & Eternal Only • Dari SenZ V2")
+            if jumlah == 3 or jumlah == 4:
+                # Mute 5 menit, biar Carl Bot yang kasih paham
+                try:
+                    await message.author.timeout(duration=300, reason="Ngomong jorok")
+                except:
+                    pass
+            elif jumlah >= 5:
+                try:
+                    await message.author.ban(reason="5x ngomong jorok")
+                except:
+                    pass
+                peringatan[user_id] = 0
+            return
 
-    await target.send(content=ping, embed=new_embed)
+    await bot.process_commands(message)
 
-client.run(TOKEN)
+@bot.command()
+async def test(ctx):
+    await ctx.send("CIOO JAGO aktif! Mode jago bae!")
+
+@bot.command()
+async def reset(ctx, member: discord.Member):
+    peringatan[member.id] = 0
+    await ctx.send(f"Peringatan {member.mention} di-reset!")
+
+@bot.command()
+async def cek(ctx, member: discord.Member):
+    jumlah = peringatan[member.id]
+    await ctx.send(f"{member.mention} : {jumlah}/5")
+
+bot.run(os.getenv("DISCORD_TOKEN"))
